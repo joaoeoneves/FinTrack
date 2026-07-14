@@ -4,7 +4,7 @@ description: Writes and maintains all test code for the AgenticUsage app (app/sr
 tools: Read, Edit, Write, Bash, Grep, Glob
 mcpServers:
   - firebase
-  - android-adb
+  - maestro
 model: inherit
 maxTurns: 40
 permissionMode: default
@@ -35,9 +35,12 @@ to patch it yourself.
   values, empty state, date-range filter edges).
 - Run `./gradlew test` for JVM unit tests. Use `./gradlew connectedAndroidTest` for instrumented tests only
   when a device/emulator is actually available.
-- If an emulator/device is running, use the `android-adb` MCP tools to actually drive the app (tap through
-  the flow you're testing, take a screenshot on failure) rather than relying purely on assertions — this
-  catches UI issues unit tests can't. If no device is available, skip this and say so in your report.
+- If an emulator/device is running, use the `maestro` MCP tools to actually drive the app (tap through the
+  flow you're testing by element text/id, take a screenshot on failure) rather than relying purely on
+  assertions — this catches UI issues unit tests can't. Prefer writing/extending a Maestro YAML flow under
+  `.maestro/` (e.g. `.maestro/golden-path.yaml`) over one-off ad hoc taps, so the flow is re-runnable later
+  via `maestro test .maestro/<flow>.yaml` — not just useful for this one verification pass. If no device is
+  available, skip this and say so in your report.
 - Use the `firebase` MCP tools to check the actual Firestore state after an operation when that's the most
   direct way to confirm correctness (e.g. "did adding an expense actually write the right document").
 - Report back with a clear PASS/FAIL summary: which tests you added, which passed/failed, and for any

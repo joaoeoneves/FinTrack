@@ -9,13 +9,10 @@
       "type": "http",
       "url": "https://mcp.context7.com/mcp"
     },
-    "android-adb": {
+    "maestro": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "android-mcp-server"],
-      "env": {
-        "ANDROID_HOME": "${ANDROID_HOME}"
-      }
+      "command": "/home/joaoe/.maestro/bin/maestro",
+      "args": ["mcp"]
     }
   }
 }

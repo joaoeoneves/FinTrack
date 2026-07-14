@@ -8,14 +8,14 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-if echo "$FILE_PATH" | grep -qE '/src/(test|androidTest)/'; then
+if echo "$FILE_PATH" | grep -qE '/src/(test|androidTest)/|(^|/)\.maestro/'; then
   exit 0
 else
   jq -n '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "tester may only modify files under src/test or src/androidTest — production code is the coder agent'\''s lane. Ask planner to delegate this change to coder instead."
+      permissionDecisionReason: "tester may only modify files under src/test, src/androidTest, or .maestro/ — production code is the coder agent'\''s lane. Ask planner to delegate this change to coder instead."
     }
   }'
 fi

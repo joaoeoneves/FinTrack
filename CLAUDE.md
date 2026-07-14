@@ -81,6 +81,8 @@ feature work should go through the agent pipeline below rather than being implem
 - A `PreToolUse` hook blocks `git add`/`git commit` if the diff looks like it contains a private key or API
   token (`.claude/hooks/guard-no-secrets-commit.sh`).
 - MCP servers (`.mcp.json`): `firebase` (official, `firebase-tools experimental:mcp` — Firestore/Auth
-  inspection), `context7` (current Compose/Firebase Kotlin SDK docs), `android-adb` (community; real
-  emulator/device control for `tester`, requires `ANDROID_HOME` set in the shell environment — SDK lives at
-  `/home/joaoe/Android/Sdk` on this machine but `ANDROID_HOME` isn't exported yet).
+  inspection), `context7` (current Compose/Firebase Kotlin SDK docs), `maestro` (real emulator/device E2E
+  test authoring + running for `tester` — semantic element matching, YAML flows under `.maestro/`, e.g.
+  `.maestro/golden-path.yaml`; run manually via `maestro test .maestro/<flow>.yaml`). `ANDROID_HOME` is
+  exported in the shell profile (`/home/joaoe/Android/Sdk`); the Maestro CLI itself lives at
+  `/home/joaoe/.maestro/bin/maestro`.

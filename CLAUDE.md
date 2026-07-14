@@ -28,5 +28,26 @@ Run all commands from the repository root using the Gradle wrapper.
 - `gradle/libs.versions.toml` — central version catalog; add/upgrade dependencies here rather than hardcoding versions in `app/build.gradle.kts`.
 - Min SDK 24, target/compile SDK 36, Java 11 source/target compatibility, Kotlin 2.2.10.
 
-The codebase is currently at the freshly-generated "Empty Activity" template stage — no networking,
-persistence, DI, or navigation libraries are wired in yet.
+This is a money-planning (monthly expense tracking) app, backed by Firebase Auth (Google Sign-In) and
+Firestore only (no local Room layer — Firestore's built-in offline cache is sufficient). See
+`/home/joaoe/.claude/plans/help-me-plan-an-happy-prism.md` for the full feature/data-model plan.
+
+## Claude Code tooling in this repo
+
+This project doubles as a playground for Claude Code's own dev-workflow features, so most non-trivial
+feature work should go through the agent pipeline below rather than being implemented directly:
+
+- **`/build-feature "<description>"`** — the entry point. Delegates to the `planner` subagent, which
+  nest-spawns `coder` (implements `app/src/main/**`) and `tester` (writes/runs everything under
+  `app/src/test/**` and `app/src/androidTest/**`), looping on failures.
+- **`coder` and `tester` cannot edit each other's files.** This is hook-enforced (`.claude/hooks/guard-*-paths.sh`),
+  not just a convention — `coder` can never touch test files, `tester` can never touch production code.
+- **`/seed-data`** — generates and imports a multi-month sample dataset for exercising the dashboard/filters.
+- Every subagent handoff is logged to `.claude/logs/agent-activity.jsonl` (gitignored) via
+  `SubagentStart`/`SubagentStop` hooks — useful for watching the planner→coder→tester pipeline run.
+- A `PreToolUse` hook blocks `git add`/`git commit` if the diff looks like it contains a private key or API
+  token (`.claude/hooks/guard-no-secrets-commit.sh`).
+- MCP servers (`.mcp.json`): `firebase` (official, `firebase-tools experimental:mcp` — Firestore/Auth
+  inspection), `context7` (current Compose/Firebase Kotlin SDK docs), `android-adb` (community; real
+  emulator/device control for `tester`, requires `ANDROID_HOME` set in the shell environment — SDK lives at
+  `/home/joaoe/Android/Sdk` on this machine but `ANDROID_HOME` isn't exported yet).

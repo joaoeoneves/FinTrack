@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "firebase": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "firebase-tools@latest", "experimental:mcp"]
+    },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "android-adb": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "android-mcp-server"],
+      "env": {
+        "ANDROID_HOME": "${ANDROID_HOME}"
+      }
+    }
+  }
+}

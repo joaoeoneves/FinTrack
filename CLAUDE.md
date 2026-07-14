@@ -18,11 +18,12 @@ Run all commands from the repository root using the Gradle wrapper.
 - Run instrumented tests (`app/src/androidTest`, requires a connected device/emulator): `./gradlew connectedAndroidTest`
 - Install debug build on a connected device/emulator: `./gradlew installDebug`
 - Full check (lint + tests): `./gradlew check`
+- Run lint only: `./gradlew lint`
 - Clean build outputs: `./gradlew clean`
 
 ## Architecture
 
-- `app/src/main/java/ptech/joaoe/agenticusage/MainActivity.kt` — single entry-point `ComponentActivity`; sets Compose content directly via `setContent` (no navigation graph or DI framework set up yet).
+- `app/src/main/java/ptech/joaoe/agenticusage/MainActivity.kt` — single entry-point `ComponentActivity`; sets Compose content directly via `setContent`.
 - `app/src/main/java/ptech/joaoe/agenticusage/ui/theme/` — Compose theme (`Theme.kt`, `Color.kt`, `Type.kt`) following the standard Material 3 theming pattern (`AgenticUsageTheme` wraps composables).
 - `app/src/main/AndroidManifest.xml` — declares `MainActivity` as the sole launcher activity.
 - `gradle/libs.versions.toml` — central version catalog; add/upgrade dependencies here rather than hardcoding versions in `app/build.gradle.kts`.
@@ -31,6 +32,38 @@ Run all commands from the repository root using the Gradle wrapper.
 This is a money-planning (monthly expense tracking) app, backed by Firebase Auth (Google Sign-In) and
 Firestore only (no local Room layer — Firestore's built-in offline cache is sufficient). See
 `/home/joaoe/.claude/plans/help-me-plan-an-happy-prism.md` for the full feature/data-model plan.
+
+### Target package structure
+
+As feature code lands (via `/build-feature`), organize `app/src/main/java/ptech/joaoe/agenticusage/` into:
+
+- `ui/` — Compose screens and components
+- `data/` — repositories, data sources, and models
+- `domain/` — use cases and domain models
+- `di/` — Hilt dependency injection modules
+- `app/src/test/` — unit tests
+- `app/src/androidTest/` — instrumented tests
+
+### Code style & conventions
+
+- Use Kotlin idioms (scope functions, extensions, sealed classes) and follow standard Kotlin coding
+  conventions.
+- All new UI is Jetpack Compose; async work uses coroutines and `Flow`.
+- MVVM: ViewModels hold state and logic, composables stay declarative.
+- Hilt for dependency injection.
+- Sealed classes/interfaces for UI state; data classes for models and DTOs.
+- Prefer immutable data (`val` over `var`).
+
+### State management
+
+- `StateFlow` for UI state in ViewModels; collect it in Compose with `collectAsStateWithLifecycle`.
+- `remember`/`mutableStateOf` only for local, ephemeral UI state — not app state, which belongs in the
+  ViewModel.
+
+### Navigation
+
+- Compose Navigation with type-safe routes, defined in a central navigation graph.
+- Pass arguments through routes, not shared/global state.
 
 ## Claude Code tooling in this repo
 

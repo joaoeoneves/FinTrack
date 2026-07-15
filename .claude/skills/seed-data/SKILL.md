@@ -1,9 +1,9 @@
 ---
 name: seed-data
-description: Generates a realistic multi-month sample dataset of expenses for the AgenticUsage app and imports it, so the dashboard/filters/reports have real data to exercise without manual entry.
+description: Generates a realistic multi-month sample dataset of expenses for the FinTrack app and imports it, so the dashboard/filters/reports have real data to exercise without manual entry.
 ---
 
-You are running the `/seed-data` skill for the AgenticUsage money-planning app.
+You are running the `/seed-data` skill for the FinTrack money-planning app.
 
 Generate a CSV with columns `name, amountCents, category, date, note` covering roughly the last 12 months,
 with a realistic and varied distribution across the four fixed categories — `Transfer`, `Investments`,

@@ -1,9 +1,9 @@
 ---
 name: build-feature
-description: Implements a feature end-to-end for the AgenticUsage app by orchestrating planner, coder, and tester as three independent subagents, with a hard file-lane separation between coder (production code) and tester (test code). Use for any non-trivial app feature work instead of implementing directly.
+description: Implements a feature end-to-end for the FinTrack app by orchestrating planner, coder, and tester as three independent subagents, with a hard file-lane separation between coder (production code) and tester (test code). Use for any non-trivial app feature work instead of implementing directly.
 ---
 
-You are running the `/build-feature` skill for the AgenticUsage money-planning app.
+You are running the `/build-feature` skill for the FinTrack money-planning app.
 
 Take the feature description passed as this skill's argument. If none was given, ask the user for one
 before proceeding — don't guess at scope.

@@ -1,6 +1,6 @@
 ---
 name: coder
-description: Implements application/production code for the AgenticUsage app under app/src/main. Never touches test code — app/src/test and app/src/androidTest belong exclusively to the tester agent. Invoked directly by the main session with a concrete implementation plan; cannot invoke any other agent itself.
+description: Implements application/production code for the FinTrack app under app/src/main. Never touches test code — app/src/test and app/src/androidTest belong exclusively to the tester agent. Invoked directly by the main session with a concrete implementation plan; cannot invoke any other agent itself.
 tools: Read, Edit, Write, Bash, Grep, Glob
 mcpServers:
   - firebase
@@ -17,8 +17,8 @@ hooks:
 color: green
 ---
 
-You are the implementation agent for the AgenticUsage Android app (Kotlin, Jetpack Compose, Firebase
-Auth + Firestore, package `ptech.joaoe.agenticusage`).
+You are the implementation agent for the FinTrack Android app (Kotlin, Jetpack Compose, Firebase
+Auth + Firestore, package `com.joaoeoneves.fintrack`).
 
 ## Scope
 

@@ -13,7 +13,7 @@ if echo "$FILE_PATH" | grep -qE '/src/(test|androidTest)/|(^|/)\.maestro/'; then
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "coder may not modify test files under src/test, src/androidTest, or .maestro/ — that is the tester agent'\''s lane. Ask planner to delegate this change to tester instead."
+      permissionDecisionReason: "coder may not modify test files under src/test, src/androidTest, or .maestro/ — that is the tester agent'\''s lane. Report this back to the orchestrating session so it can route the change to tester instead."
     }
   }'
 else

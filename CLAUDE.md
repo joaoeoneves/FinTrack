@@ -70,14 +70,20 @@ As feature code lands (via `/build-feature`), organize `app/src/main/java/ptech/
 This project doubles as a playground for Claude Code's own dev-workflow features, so most non-trivial
 feature work should go through the agent pipeline below rather than being implemented directly:
 
-- **`/build-feature "<description>"`** — the entry point. Delegates to the `planner` subagent, which
-  nest-spawns `coder` (implements `app/src/main/**`) and `tester` (writes/runs everything under
-  `app/src/test/**` and `app/src/androidTest/**`), looping on failures.
+- **`/build-feature "<description>"`** — the entry point. The main session orchestrates all three
+  subagents itself: it invokes `planner` for a plan, then invokes `coder` (implements `app/src/main/**`)
+  and `tester` (writes/runs everything under `app/src/test/**` and `app/src/androidTest/**`) directly,
+  looping between them on failures.
+- **No subagent can see, know about, or invoke another.** `planner` has no `Agent` tool at all, and neither
+  `coder` nor `tester` do either — nesting is disabled for all three. Only the main session holds the full
+  picture across the pipeline; each subagent gets a self-contained prompt and reports back to the main
+  session alone.
 - **`coder` and `tester` cannot edit each other's files.** This is hook-enforced (`.claude/hooks/guard-*-paths.sh`),
   not just a convention — `coder` can never touch test files, `tester` can never touch production code.
 - **`/seed-data`** — generates and imports a multi-month sample dataset for exercising the dashboard/filters.
-- Every subagent handoff is logged to `.claude/logs/agent-activity.jsonl` (gitignored) via
-  `SubagentStart`/`SubagentStop` hooks — useful for watching the planner→coder→tester pipeline run.
+- Every subagent invocation is logged to `.claude/logs/agent-activity.jsonl` (gitignored) via
+  `SubagentStart`/`SubagentStop` hooks — useful for watching the main session's planner/coder/tester
+  orchestration run.
 - A `PreToolUse` hook blocks `git add`/`git commit` if the diff looks like it contains a private key or API
   token (`.claude/hooks/guard-no-secrets-commit.sh`).
 - MCP servers (`.mcp.json`): `firebase` (official, `firebase-tools experimental:mcp` — Firestore/Auth

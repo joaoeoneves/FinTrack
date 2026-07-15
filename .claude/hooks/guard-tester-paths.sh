@@ -15,7 +15,7 @@ else
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "tester may only modify files under src/test, src/androidTest, or .maestro/ — production code is the coder agent'\''s lane. Ask planner to delegate this change to coder instead."
+      permissionDecisionReason: "tester may only modify files under src/test, src/androidTest, or .maestro/ — production code is the coder agent'\''s lane. Report this back to the orchestrating session so it can route the change to coder instead."
     }
   }'
 fi

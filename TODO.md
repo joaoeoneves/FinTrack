@@ -7,17 +7,15 @@ they become relevant.
 
 ## Bug fixes / tech debt
 
-- [ ] Migrate deprecated icons (`Icons.Filled.TrendingUp`, `ArrowBack`, `MoreVert`) to
-      `Icons.AutoMirrored.Filled.*`. Currently trips compiler warnings in `CategoryDisplay.kt`,
-      `AddEditExpenseScreen.kt`, `ExpenseListScreen.kt`, `IncomeListScreen.kt`, `PieChart.kt`,
-      `IncomeRow.kt`.
-- [ ] Replace deprecated `confirmValueChange` on `rememberSwipeToDismissBoxState` (swipe-to-delete
-      in `ExpenseListScreen.kt`/`IncomeListScreen.kt`) — deprecated with no direct replacement;
-      current behavior still works but should move to the anchor-based approach before it breaks.
-- [ ] Fix `@param` vs `@property` annotation-target warning in `ImportExportViewModel.kt`
-      (KT-73255) — either annotate explicitly or add the suggested compiler flag.
-- [ ] Remove stock `ExampleUnitTest.kt` / `ExampleInstrumentedTest.kt` — Android-Studio boilerplate
-      with zero real coverage value, never cleaned up.
+- [x] Migrate deprecated icons (`Icons.Filled.TrendingUp`, `ArrowBack`) to
+      `Icons.AutoMirrored.Filled.*` (`MoreVert` turned out to be unused, nothing to migrate there).
+      Done 2026-07-16.
+- [x] Replace deprecated `confirmValueChange` on `rememberSwipeToDismissBoxState` (swipe-to-delete
+      in `ExpenseListScreen.kt`/`IncomeListScreen.kt`) with `LaunchedEffect(dismissState.currentValue)`
+      + `snapTo(Settled)`. Done 2026-07-16.
+- [x] Fix `@param` vs `@property` annotation-target warning in `ImportExportViewModel.kt`
+      (KT-73255) via explicit `@param:ApplicationContext`. Done 2026-07-16.
+- [x] Remove stock `ExampleUnitTest.kt` / `ExampleInstrumentedTest.kt`. Done 2026-07-16.
 - [ ] Add real instrumented (`androidTest`) coverage for at least the golden path. All on-device
       verification today is manual Maestro, which isn't wired into CI — nothing currently runs an
       on-device check automatically on push.

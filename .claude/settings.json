@@ -29,6 +29,15 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-no-secrets-commit.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__maestro__run|mcp__maestro__run_on_cloud",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/disable-emulator-animations.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [

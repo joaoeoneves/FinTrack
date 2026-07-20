@@ -8,40 +8,9 @@ session can resume at the top without re-triaging. Completed items have been mov
 at the bottom — the tiers below are the actionable remainder, ordered highest-priority first.
 
 **Resume point:** P1 (correctness/silent-failure bugs) and the earlier data-loss/correctness pass are
-fully cleared as of 2026-07-20 — see the completed log. **Next up is P2 (security hardening)**,
-starting with Firestore rules validation.
-
-## P2 — Security / data integrity
-
-- [ ] Firestore rules (`firestore.rules`) only check `request.auth.uid == userId` — cross-user isolation
-      is solid, but there's no `request.resource.data` validation at all. A modified client can write a
-      negative `amountCents`/`limitCents`, an arbitrary `category` string (which then silently
-      disappears client-side per the `mapNotNull` finding below), or a `budgets` doc keyed by an invalid
-      category. Not a cross-tenant leak, but worth adding type/range/enum checks since there's no backend
-      to catch this otherwise.
-- [ ] Release build has R8 fully disabled (`app/build.gradle.kts`, `optimization { enable = false }` in
-      `buildTypes.release`) — no shrinking or obfuscation on `assembleRelease`. Beyond APK bloat, this
-      leaves Firestore collection/field names and app logic trivially readable in a decompiled release
-      APK. Worth re-enabling with a proper `proguard-rules.pro` pass before any real release.
-- [ ] `.claude/hooks/guard-no-secrets-commit.sh` (dev tooling) has two gaps: a single Bash call doing
-      `git add newfile && git commit` can slip a brand-new file's secret past it (nothing is staged yet
-      when `git diff`/`git diff --cached` run), and its pattern list has no coverage for Google/Firebase
-      API keys (`AIza...`) or generic `apiKey`/JWT patterns — notably the exact credential type
-      `google-services.json` uses.
-
-## P3 — Silent-failure hygiene
-
-- [ ] Malformed/partial Firestore documents (bad enum value, wrong field type) are dropped via
-      `mapNotNull` with zero error/log signal (`FirestoreExpenseRepository.kt:160-183` and the Income/
-      Budget equivalents) — harmless today, but a silent data-loss vector on any future category
-      rename or schema change.
-- [ ] Import/export's catch-all in `ImportExportViewModel` doesn't special-case
-      `CancellationException`, so cancelling mid-operation surfaces as a spurious "failed" error instead
-      of propagating cancellation.
-- [ ] `DashboardViewModel`'s `monthRange` is computed once at construction — if the Dashboard stays
-      subscribed across a midnight/month rollover, budget "spent this month" keeps using the stale range.
-- [ ] `ExpenseListViewModel`'s search query/sort option aren't restored via `SavedStateHandle` (unlike
-      `timeRange`) — lost on process death.
+fully cleared as of 2026-07-20 — see the completed log. **P2 (security hardening) and P3
+(silent-failure hygiene) are fully cleared** as of 2026-07-20 — see the completed log. **Next up is
+P4 (UX polish)**.
 
 ## P4 — UX polish
 
@@ -158,3 +127,65 @@ more speculative lifts.
       Dashboard's scroll-clip bounds, same root cause already worked around in
       `swipe-delete-check.yaml`) while manually verifying all four `.maestro/` E2E flows on a live
       emulator. Done 2026-07-20.
+- [x] **[P2] Firestore rules field validation.** `firestore.rules` now validates `request.resource.data`
+      on every `create`/`update`, not just `request.auth.uid`: `amountCents`/`limitCents` must be a
+      positive int, `category` (expenses) and the budget document id (which doubles as the category) must
+      be one of the four known `ExpenseCategory` values, `date` must be a `timestamp`, and `name`/`source`
+      must be a non-empty bounded string. Validated with
+      `mcp__firebase__firebase_validate_security_rules` (no errors) and deployed live to the
+      `agenticusage-d7ce3` Firebase project via `firebase_deploy` (firestore only). Done 2026-07-20.
+- [x] **[P2] `guard-no-secrets-commit.sh` gaps fixed.** The hook now also scans the raw contents of every
+      untracked/modified/staged file from `git status --porcelain`, not just `git diff`/`git diff
+      --cached` — closing the gap where a single `git add newfile && git commit` call could slip a
+      brand-new file's secret past a diff-only check. Pattern list extended with Google/Firebase API keys
+      (`AIza...`), a generic `"apiKey": "..."` JSON field, and JWTs. Manually verified against a synthetic
+      Firebase-key-bearing untracked file (blocked) and the real pending changes at the time (not
+      blocked). Done 2026-07-20.
+- [x] **[P2] R8 re-enabled for release builds.** `app/build.gradle.kts` now sets
+      `optimization { enable = true }` in `buildTypes.release` (gated behind
+      `android.r8.gradual.support=true` in `gradle.properties`, required by AGP 9.2.1 for this DSL).
+      `assembleRelease` shrinks the unsigned APK from ~26MB to ~3.5MB with genuine class/method renaming.
+      **Caught a real runtime-only regression during on-device verification**: R8 renamed the
+      `TimeRange` enum (`domain/model/TimeRange.kt`), which Navigation-Compose resolves by
+      fully-qualified name at NavHost setup for its type-safe `ExpenseList`/`IncomeList` route args
+      (`ui/navigation/Routes.kt`) — this crashed the entire authenticated nav graph immediately after
+      sign-in on every launch. Fixed with a `-keepnames`/`-keepclassmembers` pair for `TimeRange` in the
+      new `app/src/main/keepRules/rules.keep` (AGP 9.x's replacement for the classic
+      `proguard-rules.pro` + `proguardFiles()` mechanism). Re-verified end-to-end: signed the release
+      APK with the local debug keystore (no signing config exists or was added — ephemeral, for this
+      check only), installed on the `agenticusage_test` emulator, signed in, and ran the full
+      `.maestro/golden-path.yaml` flow against the release build — passed clean, zero crashes in
+      logcat. No other `@Serializable enum class` exists in the codebase, so this was the only instance
+      of the bug. Done 2026-07-20.
+- [x] **[P3] Malformed Firestore docs now logged instead of silently dropped.** Each repository's
+      `toXOrNull()` (`FirestoreExpenseRepository`/`Income`/`Budget`) now calls `Log.w` at every
+      early-return point (missing/invalid field, unresolvable category enum) before returning null;
+      `toBudgetOrNull()` was restructured into a single `when` expression to stay under detekt's
+      `ReturnCount` limit while still logging each case distinctly. Covered by new tests exercising real
+      `DocumentSnapshot` instances (via Firestore's own package-private `fromDocument` factory, since no
+      mocking library exists in this project) for both well-formed docs (no log) and each malformed
+      variant (dropped + `Log.w` fires, verified via Robolectric's `ShadowLog`). Done 2026-07-20.
+- [x] **[P3] `CancellationException` no longer swallowed in `ImportExportViewModel`.** Both
+      `onImportFileSelected` and `onExportTargetSelected` now `catch (e: CancellationException) { throw
+      e }` before their existing catch-all, so cancelling mid-read/write propagates cancellation instead
+      of surfacing as a spurious "failed" error. Covered by new tests using throwing test-only
+      `ContentProvider`s (`CancellingContentProvider`/`GenericFailureContentProvider`, since
+      `ContentResolver.openInputStream/openOutputStream` are `final` and can't be mocked directly)
+      proving cancellation propagates while a genuine (non-cancellation) failure still correctly surfaces
+      as `Error`. Done 2026-07-20.
+- [x] **[P3] `DashboardViewModel`'s `monthRange` no longer stale.** `monthRange` moved from a
+      construction-time class-level `val` to a local `val` recomputed fresh inside `budgetProgress()`
+      on every `timeRange`/`retryTrigger` emission. `DashboardScreen.kt` also gained a `DisposableEffect`
+      that calls `onRetry()` on `ON_RESUME`, so returning to the Dashboard after backgrounding (the
+      realistic midnight-rollover case — an always-foregrounded, never-backgrounded overnight session is
+      an accepted remaining edge case) refreshes the month range without requiring manual interaction. No
+      `delay()`-based polling was introduced inside the ViewModel, since that would hang existing tests'
+      `advanceUntilIdle()` calls. Verified via new unit tests plus a live Maestro golden-path run
+      including an explicit `KEYCODE_HOME` → relaunch cycle — no crash, Dashboard re-rendered correctly.
+      Done 2026-07-20.
+- [x] **[P3] `ExpenseListViewModel` query/sort now survive process death.** `query`/`sortOption` switched
+      from plain `MutableStateFlow` to `savedStateHandle.getStateFlow(...)`-backed state, with
+      `onQueryChanged`/`onSortSelected` now writing through the handle — matching how `timeRange` already
+      survived restoration. Covered by a new test simulating process-death recreation (constructing a
+      second `ExpenseListViewModel` against the same `SavedStateHandle` instance) confirming both values
+      round-trip instead of resetting to defaults. Done 2026-07-20.

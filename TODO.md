@@ -48,13 +48,16 @@ as they become relevant.
       `FirestoreIncomeRepository.addIncomeList()` has the identical batch-abort bug but has no CSV-import
       UI to surface it through yet, so it was intentionally left unfixed — revisit once income CSV import
       (below) lands. Done 2026-07-20.
-- [ ] Bare-date CSV rows (e.g. `"2024-01-15"`, no time component) parse as UTC midnight
-      (`ExpenseCsvParser.kt:133-142`), landing a calendar day earlier on devices with a negative UTC
-      offset. Only affects hand-edited import files, since the app's own export always writes a full
-      instant.
-- [ ] Sign-out ordering: if `credentialManager.clearCredentialState()` throws, `firebaseAuth.signOut()`
-      is never reached (`FirebaseAuthRepository.kt:75-82`) — UI reports "sign-out failed" while the user
-      is, confusingly, still logged in.
+- [x] Bare-date CSV rows (e.g. `"2024-01-15"`, no time component) parse as UTC midnight, landing a
+      calendar day earlier on devices with a negative UTC offset. `ExpenseCsvParser.parse` now takes a
+      `zone: ZoneId = ZoneId.systemDefault()` parameter threaded to the bare-date fallback, so it lands
+      on the calendar day the user actually wrote; the offset-aware full-instant branch (used by the
+      app's own export) is unchanged. Done 2026-07-20.
+- [x] Sign-out ordering: if `credentialManager.clearCredentialState()` throws, `firebaseAuth.signOut()`
+      was never reached — UI reported "sign-out failed" while the user was, confusingly, still logged
+      in. Both calls now run independently via `runCatching`; the overall result is driven solely by
+      `firebaseAuth.signOut()`'s outcome, so a credential-clear failure no longer masks a real sign-out.
+      Done 2026-07-20.
 - [ ] Malformed/partial Firestore documents (bad enum value, wrong field type) are dropped via
       `mapNotNull` with zero error/log signal (`FirestoreExpenseRepository.kt:160-183` and the Income/
       Budget equivalents) — harmless today, but a silent data-loss vector on any future category

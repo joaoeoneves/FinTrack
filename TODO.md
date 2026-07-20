@@ -31,17 +31,23 @@ as they become relevant.
       exist (previously silent no-op), matching the fakes' existing behavior; the fakes were already
       correct here and only needed recompiling against the `getExpense`/`getIncome` signature change.
       Done 2026-07-20.
-- [ ] **[data loss] CSV round-trip is broken for notes containing newlines**, despite
-      `ExpenseCsvWriter`'s doc comment claiming a guaranteed round-trip. The parser line-splits the whole
-      file (`ExpenseCsvParser.kt:44-48`) *before* quote-aware field parsing, so a quoted multi-line note
-      gets torn into two rows and silently truncated on import.
-- [ ] **CSV import rejects Excel/Google Sheets "CSV UTF-8" exports** — a leading BOM isn't stripped
-      before the header-match check (`ExpenseCsvParser.kt:54-60`), so a valid re-exported/edited file is
-      rejected with "Unrecognized header."
-- [ ] **Bulk CSV import has no partial-progress tracking.** A mid-import failure
-      (`FirestoreExpenseRepository.kt:123-142`, `FirestoreIncomeRepository.kt:122-141`) reports total
-      failure with no record of which 400-row batches already committed — retrying the same file after a
-      partial failure duplicates the already-imported rows (doc IDs aren't content-keyed/idempotent).
+- [x] **[data loss] CSV round-trip is broken for notes containing newlines**, despite
+      `ExpenseCsvWriter`'s doc comment claiming a guaranteed round-trip. `ExpenseCsvParser` now splits the
+      raw file into logical records with a quote-aware scanner (only treating `\n`/`\r`/`\r\n` as a row
+      separator when not inside an open quoted field) instead of pre-splitting on physical lines, so a
+      quoted multi-line note survives import intact. Done 2026-07-20.
+- [x] **CSV import rejects Excel/Google Sheets "CSV UTF-8" exports** — a leading BOM is now stripped
+      before header matching, so a valid re-exported/edited file is no longer rejected with "Unrecognized
+      header." Done 2026-07-20.
+- [x] **Bulk CSV import has no partial-progress tracking.** `addExpenses` now returns a `BulkAddResult`
+      (succeeded count + optional failure) instead of `Result<Int>`, with the per-chunk try/catch moved
+      inside the batch loop so a mid-import failure reports exactly how many rows committed before it.
+      The Import UI surfaces a new `PartialFailure` state warning the user that re-importing the same
+      file may duplicate the already-committed rows — full content-keyed idempotency was judged out of
+      scope for this pass (flagged as a possible future item, not re-added here). Note:
+      `FirestoreIncomeRepository.addIncomeList()` has the identical batch-abort bug but has no CSV-import
+      UI to surface it through yet, so it was intentionally left unfixed — revisit once income CSV import
+      (below) lands. Done 2026-07-20.
 - [ ] Bare-date CSV rows (e.g. `"2024-01-15"`, no time component) parse as UTC midnight
       (`ExpenseCsvParser.kt:133-142`), landing a calendar day earlier on devices with a negative UTC
       offset. Only affects hand-edited import files, since the app's own export always writes a full

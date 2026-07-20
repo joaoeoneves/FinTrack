@@ -11,9 +11,24 @@ fi
 
 cd "${CLAUDE_PROJECT_DIR}" 2>/dev/null || exit 0
 
-CONTENT=$( { git diff --cached -U0 2>/dev/null; git diff -U0 2>/dev/null; } )
+DIFF_CONTENT=$( { git diff --cached -U0 2>/dev/null; git diff -U0 2>/dev/null; } )
 
-PATTERN='-----BEGIN (RSA |EC )?PRIVATE KEY-----|"private_key"[[:space:]]*:|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]+'
+# A brand-new file has no diff until after it's staged (`git add newfile &&
+# git commit` in one call would slip past a diff-only check), so also scan
+# the raw contents of every untracked/modified/staged file directly. This
+# naturally skips gitignored files (e.g. google-services.json) since
+# `git status` omits them unless force-added, in which case they already
+# show up in the staged diff above.
+FILE_CONTENT=""
+while IFS= read -r f; do
+  [ -f "$f" ] && FILE_CONTENT="${FILE_CONTENT}
+$(cat "$f" 2>/dev/null)"
+done < <(git status --porcelain=v1 --untracked-files=all 2>/dev/null | cut -c4-)
+
+CONTENT="${DIFF_CONTENT}
+${FILE_CONTENT}"
+
+PATTERN='-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----|"private_key"[[:space:]]*:|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]+|AIza[0-9A-Za-z_-]{35}|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|"api_?[Kk]ey"[[:space:]]*:[[:space:]]*"[A-Za-z0-9_-]{16,}"'
 
 if echo "$CONTENT" | grep -qE -- "$PATTERN"; then
   jq -n '{

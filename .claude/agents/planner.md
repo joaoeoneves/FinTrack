@@ -23,7 +23,13 @@ you never implement it and you never hand it off yourself.
    - What files change (new and modified), with enough specificity that someone with no other context
      could implement it correctly.
    - What the new/changed behavior is, including edge cases worth handling.
-   - What should be tested: the behaviors and edge cases a verification pass should cover.
+   - What should be tested, split explicitly by tier so each downstream agent gets only what's theirs:
+     - **Unit-test tier**: pure logic/state behaviors and edge cases a JVM test can cover without a real
+       device (ViewModel state transitions, formatting, validation, repository logic against fakes).
+     - **E2E tier**: behaviors that only a real running app can prove — navigation actually wired up, a
+       flow spanning multiple screens, real Compose recomposition, persistence round-tripping. Say
+       explicitly if a feature has no meaningful E2E surface (e.g. a pure formatting change) so that tier
+       isn't invoked for nothing.
    - Anything ambiguous in the request that you had to make a judgment call on, flagged explicitly.
 3. Stop there. Do not attempt to implement anything, and do not try to delegate to any other agent — you
    have no tool to do so, and this is intentional. Whoever invoked you decides what happens with the plan.

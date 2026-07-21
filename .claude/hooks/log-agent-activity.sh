@@ -1,8 +1,9 @@
 #!/bin/bash
 # SubagentStart/SubagentStop hook: appends a one-line JSON record of every
-# subagent invocation so the main session's planner/coder/tester orchestration
-# can be watched after the fact. Project-level (settings.json) mechanism,
-# distinct from the per-agent frontmatter hooks used for path enforcement.
+# subagent invocation so the main session's planner/coder/unit-tester/e2e-tester/
+# validator orchestration can be watched after the fact. Project-level
+# (settings.json) mechanism, distinct from the per-agent frontmatter hooks
+# used for path enforcement.
 INPUT=$(cat)
 LOG_DIR="${CLAUDE_PROJECT_DIR}/.claude/logs"
 mkdir -p "$LOG_DIR"

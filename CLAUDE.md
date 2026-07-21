@@ -68,27 +68,46 @@ As feature code lands (via `/build-feature`), organize `app/src/main/java/com/jo
 ## Claude Code tooling in this repo
 
 This project doubles as a playground for Claude Code's own dev-workflow features, so most non-trivial
-feature work should go through the agent pipeline below rather than being implemented directly:
+feature work should go through the agent pipeline below rather than being implemented directly. There are
+five subagents, each with a single-purpose lane:
 
-- **`/build-feature "<description>"`** — the entry point. The main session orchestrates all three
-  subagents itself: it invokes `planner` for a plan, then invokes `coder` (implements `app/src/main/**`)
-  and `tester` (writes/runs everything under `app/src/test/**` and `app/src/androidTest/**`) directly,
-  looping between them on failures.
-- **No subagent can see, know about, or invoke another.** `planner` has no `Agent` tool at all, and neither
-  `coder` nor `tester` do either — nesting is disabled for all three. Only the main session holds the full
-  picture across the pipeline; each subagent gets a self-contained prompt and reports back to the main
-  session alone.
-- **`coder` and `tester` cannot edit each other's files.** This is hook-enforced (`.claude/hooks/guard-*-paths.sh`),
-  not just a convention — `coder` can never touch test files, `tester` can never touch production code.
+- **`planner`** — read-only, breaks a feature request into a concrete plan (files, behavior, what to test
+  per tier). Cannot edit files.
+- **`coder`** — implements production code under `app/src/main/**`.
+- **`unit-tester`** — writes/runs JVM unit tests under `app/src/test/**`.
+- **`e2e-tester`** — writes/runs instrumented and Maestro tests under `app/src/androidTest/**` and
+  `.maestro/**`.
+- **`validator`** — read-only, runs ktlint/detekt/lint/build checks and inspects CI pipeline runs, then
+  reports a punch list of findings grouped by which of the other four agents' lane owns the fix. Never
+  fixes anything itself.
+
+Entry points:
+
+- **`/build-feature "<description>"`** — the full pipeline: `planner` → `coder` → `unit-tester` →
+  `e2e-tester` → `validator`, looping back to whichever agent owns a failure until it's clean.
+- **`/validate`** — standalone health check (e.g. "check why the pipeline failed"): invokes `validator`,
+  then routes its findings to `coder`/`unit-tester`/`e2e-tester` as needed, without going through a full
+  feature build.
 - **`/seed-data`** — generates and imports a multi-month sample dataset for exercising the dashboard/filters.
+
+Rules that hold across all five:
+
+- **No subagent can see, know about, or invoke another.** None of the five has the `Agent` tool — nesting
+  is disabled for all of them, including `validator`, which only *reports* which lane owns a fix. Only the
+  main session (or a skill run by it) holds the full picture across the pipeline and does the actual
+  delegating; each subagent gets a self-contained prompt and reports back to the main session alone.
+- **`coder`, `unit-tester`, and `e2e-tester` cannot edit each other's files.** This is hook-enforced
+  (`.claude/hooks/guard-coder-paths.sh`, `guard-unit-tester-paths.sh`, `guard-e2e-tester-paths.sh`), not
+  just a convention — `coder` owns `app/src/main/**` only, `unit-tester` owns `app/src/test/**` only, and
+  `e2e-tester` owns `app/src/androidTest/**`/`.maestro/**` only. `validator` has no Edit/Write tools at all,
+  so it needs no path guard.
 - Every subagent invocation is logged to `.claude/logs/agent-activity.jsonl` (gitignored) via
-  `SubagentStart`/`SubagentStop` hooks — useful for watching the main session's planner/coder/tester
-  orchestration run.
+  `SubagentStart`/`SubagentStop` hooks — useful for watching the main session's orchestration run.
 - A `PreToolUse` hook blocks `git add`/`git commit` if the diff looks like it contains a private key or API
   token (`.claude/hooks/guard-no-secrets-commit.sh`).
 - MCP servers (`.mcp.json`): `firebase` (official, `firebase-tools experimental:mcp` — Firestore/Auth
-  inspection), `context7` (current Compose/Firebase Kotlin SDK docs), `maestro` (real emulator/device E2E
-  test authoring + running for `tester` — semantic element matching, YAML flows under `.maestro/`, e.g.
-  `.maestro/golden-path.yaml`; run manually via `maestro test .maestro/<flow>.yaml`). `ANDROID_HOME` is
-  exported in the shell profile (`/home/joaoe/Android/Sdk`); the Maestro CLI itself lives at
-  `/home/joaoe/.maestro/bin/maestro`.
+  inspection, used by `coder`, `e2e-tester`, and `validator`), `context7` (current Compose/Firebase Kotlin
+  SDK docs, used by `coder`), `maestro` (real emulator/device E2E test authoring + running for `e2e-tester`
+  — semantic element matching, YAML flows under `.maestro/`, e.g. `.maestro/golden-path.yaml`; run manually
+  via `maestro test .maestro/<flow>.yaml`). `ANDROID_HOME` is exported in the shell profile
+  (`/home/joaoe/Android/Sdk`); the Maestro CLI itself lives at `/home/joaoe/.maestro/bin/maestro`.

@@ -25,7 +25,7 @@ This README covers both halves: the app itself, and the AI-assisted development 
   - [CI](#ci)
 - [AI-assisted development](#ai-assisted-development)
   - [Philosophy](#philosophy)
-  - [Subagents](#subagents-plannercodertester)
+  - [Subagents](#subagents-plannercoderunit-testere2e-testervalidator)
   - [Skills](#skills)
   - [Hooks](#hooks)
   - [MCP servers](#mcp-servers)
@@ -190,41 +190,52 @@ actual files.
 
 ### Philosophy
 
-Most non-trivial feature work in this repo is driven through a three-subagent pipeline
-(**planner → coder → tester**) rather than implemented directly in the main session, with two properties
-enforced structurally, not just by convention or prompt etiquette:
+Most non-trivial feature work in this repo is driven through a five-subagent pipeline
+(**planner → coder → unit-tester → e2e-tester → validator**) rather than implemented directly in the main
+session, with three properties enforced structurally, not just by convention or prompt etiquette:
 
-- **File-lane separation**: `coder` can only ever touch production code (`app/src/main/**`); `tester` can
-  only ever touch test code (`app/src/test/**`, `app/src/androidTest/**`, `.maestro/**`). Each is enforced
-  by a `PreToolUse` hook that denies the other's file paths outright — a rogue or confused agent can't just
-  "fix" a failing test by editing the test instead of the underlying bug, because it structurally cannot
-  reach that file.
-- **No nested delegation**: the main Claude Code session is the *sole* orchestrator. None of the three
-  subagents can see, know about, or invoke one another — `planner` has no `Agent` tool at all, and neither
-  `coder` nor `tester` do either. Each subagent gets a self-contained prompt and reports back to the main
-  session alone; only the main session holds the full picture across the pipeline.
+- **File-lane separation**: `coder` can only ever touch production code (`app/src/main/**`); `unit-tester`
+  can only ever touch JVM unit tests (`app/src/test/**`); `e2e-tester` can only ever touch instrumented/
+  Maestro tests (`app/src/androidTest/**`, `.maestro/**`). Each is enforced by a `PreToolUse` hook that
+  denies the others' file paths outright — a rogue or confused agent can't just "fix" a failing test by
+  editing the test instead of the underlying bug, because it structurally cannot reach that file.
+- **No nested delegation**: the main Claude Code session is the *sole* orchestrator. None of the five
+  subagents can see, know about, or invoke one another — none of them has the `Agent` tool, including
+  `validator`. Each subagent gets a self-contained prompt and reports back to the main session alone; only
+  the main session holds the full picture across the pipeline and decides where a fix gets routed.
+- **Diagnose/fix separation**: `validator` only runs checks (lint, detekt, build, CI pipeline status) and
+  reports a punch list of findings grouped by which agent's lane owns each one. It cannot edit a single
+  file, even for a one-line fix — that decision and the actual edit always go through the owning agent.
 
-### Subagents (`planner`/`coder`/`tester`)
+### Subagents (`planner`/`coder`/`unit-tester`/`e2e-tester`/`validator`)
 
-Defined in [`.claude/agents/`](.claude/agents/), normally invoked via `/build-feature` (see [Skills](#skills)):
+Defined in [`.claude/agents/`](.claude/agents/), normally invoked via `/build-feature` or `/validate` (see
+[Skills](#skills)):
 
 | Agent | Tools | Role | File lane |
 |---|---|---|---|
-| [`planner`](.claude/agents/planner.md) | `Read, Grep, Glob` | Reads the codebase/plan doc and returns a concrete implementation plan. Read-only — never edits, never delegates. | none |
+| [`planner`](.claude/agents/planner.md) | `Read, Grep, Glob` | Reads the codebase/plan doc and returns a concrete implementation plan, split into a unit-test tier and an E2E tier. Read-only — never edits, never delegates. | none |
 | [`coder`](.claude/agents/coder.md) | `Read, Edit, Write, Bash, Grep, Glob` + `firebase`, `context7` MCP | Implements production code from a plan handed to it directly by the main session. | `app/src/main/**` (+ top-level build files) |
-| [`tester`](.claude/agents/tester.md) | `Read, Edit, Write, Bash, Grep, Glob` + `firebase`, `maestro` MCP | Two required verification tiers: **unit tests** (JVM) and **functional/instrumented tests** driving a real emulator via Maestro — both mandatory whenever a device is available, not "unit tests plus Maestro if convenient." | `app/src/test/**`, `app/src/androidTest/**`, `.maestro/**` |
+| [`unit-tester`](.claude/agents/unit-tester.md) | `Read, Edit, Write, Bash, Grep, Glob` | Writes and runs real JVM unit tests for the behavior described — happy path plus finance-relevant edge cases. | `app/src/test/**` |
+| [`e2e-tester`](.claude/agents/e2e-tester.md) | `Read, Edit, Write, Bash, Grep, Glob` + `firebase`, `maestro` MCP | Functional/instrumented verification driving a real emulator via Maestro (or a Compose `androidTest` when device automation isn't needed) — required whenever a device is available, not "if convenient." | `app/src/androidTest/**`, `.maestro/**` |
+| [`validator`](.claude/agents/validator.md) | `Read, Bash, Grep, Glob` + `firebase` MCP | Read-only diagnostic pass: ktlint, detekt, Android lint, fast compile check, CI pipeline status, Firestore rules validity. Reports a punch list routed by lane — never edits anything itself. | none |
 
 The main session orchestrates directly: invoke `planner` for a plan → invoke `coder` with that plan →
-invoke `tester` to verify → loop back to `coder` with specific failure details if `tester` finds problems →
-report a final summary to the human. This loop is spelled out in the `/build-feature` skill, not left to
-each agent's own judgment about who to call next.
+invoke `unit-tester` to verify the logic → invoke `e2e-tester` to verify it end-to-end on a real app →
+invoke `validator` as a final gate → loop back to whichever agent owns a failure (from either a test tier or
+`validator`'s punch list) with specific details → report a final summary to the human. This loop is spelled
+out in the `/build-feature` skill, not left to each agent's own judgment about who to call next.
 
 ### Skills
 
 Defined in [`.claude/skills/`](.claude/skills/):
 
 - **[`/build-feature "<description>"`](.claude/skills/build-feature/SKILL.md)** — the entry point for
-  non-trivial feature work. Runs the full planner → coder → tester loop described above.
+  non-trivial feature work. Runs the full planner → coder → unit-tester → e2e-tester → validator loop
+  described above.
+- **[`/validate`](.claude/skills/validate/SKILL.md)** — standalone health check outside of a feature build:
+  invokes `validator` (e.g. against a specific failing CI run) and routes its findings to
+  `coder`/`unit-tester`/`e2e-tester` as needed.
 - **[`/seed-data`](.claude/skills/seed-data/SKILL.md)** — generates a realistic multi-month sample CSV
   (varied across all four expense categories) and imports it, so the dashboard's filters/charts have real
   data to exercise without tedious manual entry.
@@ -235,11 +246,14 @@ Defined in [`.claude/hooks/`](.claude/hooks/) and wired up in [`.claude/settings
 
 | Hook | Trigger | Purpose |
 |---|---|---|
-| `guard-coder-paths.sh` | `coder`'s own `PreToolUse` on `Edit\|Write\|MultiEdit` | Denies any write under `src/test/`, `src/androidTest/`, or `.maestro/` — that's `tester`'s lane. |
-| `guard-tester-paths.sh` | `tester`'s own `PreToolUse` on `Edit\|Write\|MultiEdit` | Denies any write *outside* those same test paths — production code is `coder`'s lane. |
+| `guard-coder-paths.sh` | `coder`'s own `PreToolUse` on `Edit\|Write\|MultiEdit` | Denies any write under `src/test/`, `src/androidTest/`, or `.maestro/` — those are `unit-tester`'s and `e2e-tester`'s lanes. |
+| `guard-unit-tester-paths.sh` | `unit-tester`'s own `PreToolUse` on `Edit\|Write\|MultiEdit` | Denies any write outside `src/test/` — production code is `coder`'s lane, instrumented/Maestro tests are `e2e-tester`'s. |
+| `guard-e2e-tester-paths.sh` | `e2e-tester`'s own `PreToolUse` on `Edit\|Write\|MultiEdit` | Denies any write outside `src/androidTest/` or `.maestro/` — production code is `coder`'s lane, JVM unit tests are `unit-tester`'s. |
 | `guard-no-secrets-commit.sh` | Project-wide `PreToolUse` on `Bash` (git commit/add) | Greps staged content for private-key/API-token patterns and blocks the commit if found. |
 | `lint-kotlin.sh` | Project-wide `PostToolUse` on `Edit\|Write\|MultiEdit` matching `*.kt` | Runs ktlint/detekt immediately after any `.kt` edit, so formatting/lint issues surface during the edit, not just at CI time. |
 | `log-agent-activity.sh` | Project-wide `SubagentStart`/`SubagentStop` | Appends a one-line JSON record of every subagent invocation to `.claude/logs/agent-activity.jsonl` (gitignored). |
+
+`validator` has no Edit/Write tools at all, so it needs no path guard.
 
 ### MCP servers
 
@@ -247,9 +261,9 @@ Registered project-wide in [`.mcp.json`](.mcp.json):
 
 | Server | What it is | Used for |
 |---|---|---|
-| **[Firebase](https://firebase.google.com/docs/cli/mcp-server)** (`firebase-tools experimental:mcp`, official) | Firebase's own experimental MCP server, run via `npx` | Inspecting/mutating real Firestore documents, checking and deploying security rules, checking Auth users — used by both `coder` (verifying an implementation matches real data) and `tester` (verifying a write actually landed correctly), and by the main session for reviewing/deploying rules changes (a production action, always done with explicit human confirmation, never delegated to a subagent). |
+| **[Firebase](https://firebase.google.com/docs/cli/mcp-server)** (`firebase-tools experimental:mcp`, official) | Firebase's own experimental MCP server, run via `npx` | Inspecting/mutating real Firestore documents, checking and deploying security rules, checking Auth users — used by `coder` (verifying an implementation matches real data), `e2e-tester` (verifying a write actually landed correctly), `validator` (checking security rules validity), and by the main session for reviewing/deploying rules changes (a production action, always done with explicit human confirmation, never delegated to a subagent). |
 | **[Context7](https://context7.com)** (hosted HTTP, official) | Up-to-date library documentation server | Current Compose/Firebase Kotlin SDK API details for `coder`, since both move fast enough to outpace training data. |
-| **[Maestro](https://maestro.mobile.dev)** (`maestro mcp`, official CLI) | Mobile/web UI test automation — declarative YAML flows, semantic element matching, screenshot/inspect tools | `tester`'s primary tool for the "functional/emulator" verification tier: driving the real app on a real emulator, inspecting the view hierarchy, taking screenshots, and authoring/running reusable `.maestro/*.yaml` flows instead of one-off ad hoc taps. |
+| **[Maestro](https://maestro.mobile.dev)** (`maestro mcp`, official CLI) | Mobile/web UI test automation — declarative YAML flows, semantic element matching, screenshot/inspect tools | `e2e-tester`'s primary tool for the "functional/emulator" verification tier: driving the real app on a real emulator, inspecting the view hierarchy, taking screenshots, and authoring/running reusable `.maestro/*.yaml` flows instead of one-off ad hoc taps. |
 
 `ANDROID_HOME` (`/home/joaoe/Android/Sdk`) and the Maestro CLI (`/home/joaoe/.maestro/bin/maestro`) are
 expected to be available in the shell environment for the Maestro MCP server and `connectedAndroidTest` to

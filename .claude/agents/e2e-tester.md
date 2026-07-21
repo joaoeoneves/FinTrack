@@ -48,20 +48,47 @@ this pipeline, so keep this tier fast and targeted:
   the template for this — it replaced what would otherwise have needed a Maestro assertion.
 - **When you do run Maestro, run only the flow(s) relevant to what changed** — e.g. a currency-formatting
   change only needs `.maestro/settings.yaml`, not the full `.maestro/` suite. Don't run the entire suite
-  "just in case" on every pass; that's exactly the slowdown this convention exists to avoid. Run the wider
-  suite only when the change is broad enough that you can't tell which flow(s) it touches.
-- Check `mcp__maestro__list_devices` (or equivalent) for a running device/emulator:
-  - **If one is available**, this tier is required, not best-effort: use the `maestro` MCP tools to
-    actually drive the app (tap through the flow by element text/id, take a screenshot on failure) and
-    confirm the described behavior really happens on screen. Prefer writing/extending a Maestro YAML flow
-    under `.maestro/` (e.g. `.maestro/golden-path.yaml`) over one-off ad hoc taps, so the flow is
-    re-runnable later via `maestro test .maestro/<flow>.yaml`. If the feature touches real Firestore data on
-    a shared emulator/project, leave that data exactly as you found it when you're done — restore or delete
-    anything you added. Animation scales are disabled automatically before every Maestro run via a
-    `PreToolUse` hook (`.claude/hooks/disable-emulator-animations.sh`) — no manual `adb shell settings put`
-    step needed, and it re-applies itself even after a cold emulator reboot resets the scale back to 1.0.
-  - **If no device is available**, say so explicitly and clearly in your report as a gap, not a silent
-    omission — don't let a PASS summary imply functional coverage that didn't actually happen.
+  "just in case" on every pass; that's exactly the slowdown this convention exists to avoid. Every emulator
+  boot + flow run costs real minutes — treat that budget as scarce on every invocation, not just the first.
+- **This still applies when you're asked to "check for regressions" after a shared-composable refactor.**
+  Identify the specific screens/flows that actually exercise the changed composable and run only those — one
+  flow per distinct call site is enough to prove the extraction didn't change behavior; you don't need every
+  flow that happens to touch the same screen for unrelated reasons, and you never need the full suite for a
+  refactor scoped to one or two shared composables. If you genuinely can't tell which flow(s) are affected,
+  say so and name the smallest set you'd start with instead of defaulting to running everything.
+
+## Emulator lifecycle — you own it end-to-end, boot to shutdown
+
+The emulator should be running only for the duration of your actual on-device work, never idle before or
+after. Treat this as part of the task, not an aside:
+
+1. **Start of your work**: check `mcp__maestro__list_devices` (or `adb devices`) for a running
+   device/emulator. If one is already up, that's fine to reuse (e.g. left over from an unclean previous
+   shutdown) — but don't boot a second one. If none is running, boot the project's AVD yourself: find it
+   via `<sdk>/emulator/emulator -list-avds` (SDK root is `ANDROID_HOME`, defaulting to `~/Android/Sdk` per
+   `CLAUDE.md` — at the time of writing the only configured AVD is `agenticusage_test`, but discover it
+   rather than hardcoding in case that changes), start it headless (e.g.
+   `emulator -avd <name> -no-snapshot -no-boot-anim -gpu swiftshader_indirect &`), and wait for
+   `adb -s <serial> shell getprop sys.boot_completed` to report `1` before doing anything else. Then install
+   the current debug build (`./gradlew :app:installDebug`) so you're not testing a stale APK.
+2. **This tier is required, not best-effort** once a device is up (booted by you or already running): use
+   the `maestro` MCP tools to actually drive the app (tap through the flow by element text/id, take a
+   screenshot on failure) and confirm the described behavior really happens on screen. Prefer
+   writing/extending a Maestro YAML flow under `.maestro/` (e.g. `.maestro/golden-path.yaml`) over one-off ad
+   hoc taps, so the flow is re-runnable later via `maestro test .maestro/<flow>.yaml`. If the feature touches
+   real Firestore data on a shared emulator/project, leave that data exactly as you found it when you're
+   done — restore or delete anything you added. Animation scales are disabled automatically before every
+   Maestro run via a `PreToolUse` hook (`.claude/hooks/disable-emulator-animations.sh`) — no manual
+   `adb shell settings put` step needed, and it re-applies itself even after a cold emulator reboot resets
+   the scale back to 1.0.
+3. **End of your work, before you report back**: once your on-device checks (and any Firestore-state
+   cleanup) are done, shut the emulator down — `adb -s <serial> emu kill` — and confirm via `adb devices`
+   that nothing is left attached, regardless of whether you booted it yourself or found it already running
+   at step 1. Don't leave it running for "the next pass" — the next invocation (yours or another agent's)
+   boots its own and tears it down the same way. Note in your report that the emulator was stopped.
+4. **If no AVD/SDK is available at all** (not just "none currently running" — an environment gap, e.g. the
+   SDK is missing), say so explicitly and clearly in your report as a gap, not a silent omission — don't let
+   a PASS summary imply functional coverage that didn't actually happen.
 
 Use the `firebase` MCP tools to check the actual Firestore state after an operation when that's the most
 direct way to confirm correctness (e.g. "did adding an expense actually write the right document").

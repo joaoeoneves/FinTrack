@@ -29,7 +29,13 @@ result to you alone.
 4. **E2E-test.** Only once `unit-tester` reports a pass, invoke `e2e-tester` with the plan's E2E tier and a
    summary of what changed. Remind it that it owns `app/src/androidTest/**` and `.maestro/**`. Skip this
    step only if `planner` explicitly flagged the feature as having no meaningful E2E surface — say so in
-   your final report if you skip it.
+   your final report if you skip it. Scope every `e2e-tester` invocation to the specific flow(s) the change
+   actually touches — name them in the prompt — rather than asking it to "verify everything still works" or
+   re-run the whole `.maestro/` suite. This applies just as much when you're sending it back for a
+   regression check after a shared-composable refactor: name the one or two flows that exercise the changed
+   composable, not every flow that happens to touch the same screen. Each emulator boot + flow run is real
+   wall-clock cost, and re-running unrelated flows on every small change is exactly the waste this scoping
+   is meant to avoid.
 5. **Loop on test failure.** If `unit-tester` or `e2e-tester` reports failures, invoke `coder` again with
    the specific failure details (test name, error, the tester's hypothesis if it has one), then re-run the
    failing tier (and anything after it) once `coder` reports back. Cap this at a few rounds — if it isn't

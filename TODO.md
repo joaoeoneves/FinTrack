@@ -10,8 +10,12 @@ at the bottom — the tiers below are the actionable remainder, ordered highest-
 **Resume point:** P1 (correctness/silent-failure bugs) and the earlier data-loss/correctness pass are
 fully cleared as of 2026-07-20 — see the completed log. **P2 (security hardening) and P3
 (silent-failure hygiene) are fully cleared** as of 2026-07-20 — see the completed log. **P4 (UX
-polish) is fully cleared** as of 2026-07-21 — see the completed log. **Next up is P5 (testing/CI
-gaps)**.
+polish) is fully cleared** as of 2026-07-21 — see the completed log. **P5's detekt-baseline item and a
+bonus dependency-freshness pass are done** as of 2026-07-21 (see the completed log) — this also
+surfaced a newly-discovered, pre-existing `./gradlew lint` gap (74 errors, mostly a missing core
+library desugaring config) added to the P5 list below. **The rest of P5 (CI wiring, androidTest
+coverage, CurrencyViewModel/language tests, budget E2E, CSV round-trip E2E, language-switching E2E,
+plus the new lint gap) is still open.**
 
 ## P5 — Testing / CI gaps
 
@@ -35,8 +39,21 @@ gaps)**.
       out — no flow anywhere actually completes a CSV round-trip through the real UI (only unit-tested
       via `ImportExportViewModelTest`).
 - [ ] No Maestro/androidTest coverage of language switching in Settings.
-- [ ] `app/config/detekt/baseline.xml` has 131 suppressed findings (`buildUponDefaultConfig = true`) —
-      worth periodically triaging down rather than treating the green check as a full bar.
+- [ ] **[newly discovered 2026-07-21]** `./gradlew lint` has never been run seriously in this project
+      (not wired into CI, and apparently not run manually either) and currently reports 74 errors, 26
+      warnings — confirmed via `git stash -u` bisection to be **fully pre-existing**, not caused by the
+      2026-07-21 dependency bump. 72 of the 74 errors are one root cause: no core library desugaring is
+      configured (`isCoreLibraryDesugaringEnabled`/`coreLibraryDesugaring` dependency), so every
+      `java.time.*` call site (`Instant.now()`, `ZoneId`, `LocalDate`/`YearMonth` arithmetic, etc. —
+      spans most of the date-handling code: `TimeRange.kt`, `Budget.kt`, `ExpenseCsvParser.kt`,
+      `DateField.kt`, both Firestore repositories, most ViewModels) is a **real crash risk on API 24–25
+      devices** (minSdk is 24, `java.time` needs API 26 without desugaring), not just a lint nag. The
+      other 2 errors are `LocalContextGetResourceValueCall` in `ExpenseListScreen.kt`/
+      `IncomeListScreen.kt` (snackbar message built via `LocalContext.current.getString(...)` instead of
+      `stringResource()`, won't recompose on a locale change). 26 warnings are lower-priority: unused
+      `colors.xml` entries, pt-PT plural/i18n gaps, one `CredentialManagerMisuse` note on
+      `FirebaseAuthRepository`'s broad catch. Fix for the big one is a single build-config change
+      (add desugaring); the other 2 errors are a small `stringResource()` swap.
 
 ## P6 — Features
 
@@ -65,6 +82,40 @@ more speculative lifts.
 ---
 
 ## Completed
+
+- [x] **[P5] Detekt baseline triage.** `app/config/detekt/baseline.xml` shrunk from 131 suppressed
+      findings to 10, via four focused `coder` passes across ~25 `app/src/main` files (plus a parallel
+      `unit-tester` pass on the 28 findings living in `app/src/test`): exception handling narrowed or
+      documented with a judgment-call comment where a broad catch is genuinely intentional (matching the
+      existing `Log.w`-before-drop pattern from the 2026-07-20 P3 pass); `LongMethod`/`LongParameterList`
+      composables decomposed (new `SettingsSections.kt`, `DashboardCallbacks`/`BalanceStat` bundling,
+      `ExpenseFormActions`/`IncomeFormActions` bundling, following the `SearchAndSortRow`/
+      `SwipeToDeleteRow` precedent from 2026-07-21); `MagicNumber` literals either extracted as named
+      `private const val`s or suppressed at the file/declaration level with a comment where they're
+      self-documenting color-token definitions (`Color.kt`/`CategoryDisplay.kt`/`Theme.kt`); one
+      unrelated pre-existing `UnnecessaryAbstractClass` finding fixed by converting `RepositoryModule`
+      from an `abstract class` to an `interface` (Dagger's own recommended shape for `@Binds`-only
+      modules). The remaining 10 entries were independently sanity-checked by `validator` running the
+      detekt CLI baseline-free — all 10 are genuinely live findings, none stale. `ktlintCheck`/`detekt`/
+      `testDebugUnitTest`/`assembleDebug` and all 5 `.maestro/` flows (including sign-in) verified
+      passing on a live emulator. Done 2026-07-21.
+- [x] **[P5, bonus scope] Dependency freshness pass.** User asked to also replace any outdated
+      dependency alongside the baseline triage. Bumped ~15 entries in `gradle/libs.versions.toml`
+      (AGP 9.2.1→9.3.0, Kotlin 2.2.10→2.4.10, Compose BOM →2026.06.01, Firebase BOM 33.7.0→34.16.0,
+      Credentials 1.3.0→1.6.0, androidx lifecycle/navigation/hilt-navigation-compose, etc.; Gradle
+      wrapper bumped 9.4.1→9.5.0 per explicit user choice). Firebase BOM 34 dropped the `-ktx` artifacts
+      entirely, so `firebase-firestore-ktx`/`firebase-auth-ktx` were swapped for the base
+      `firebase-firestore`/`firebase-auth` artifacts (production code only ever used base-package
+      classes directly, never the `Firebase.firestore`/`Firebase.auth` KTX extensions, so this was a
+      pure dependency-graph change). That same BOM bump moved `protobuf-javalite` to runtime-only Maven
+      scope, breaking `TestDocumentSnapshots.kt`'s direct `Value.newBuilder()...build()` calls at compile
+      time; fixed by routing scalar `Value` construction through Firestore's own package-private
+      `UserDataReader` instead (documented in the file). **Caught and reverted mid-session scope creep**:
+      an earlier coder pass had also bumped `compileSdk` 36→37 and the Gradle wrapper without being
+      asked, contradicting this file's own pinned "compile SDK 36" — `compileSdk` was reverted to 36
+      (Gradle wrapper bump was kept per explicit user choice). Verified via `assembleDebug`,
+      `testDebugUnitTest` (450 tests), and all 5 `.maestro/` flows on a live emulator, including sign-in
+      (the highest-risk area given the Credentials/Firebase Auth bump). Done 2026-07-21.
 
 - [x] **[P4] Date field tap target.** Add/Edit Expense/Income date fields previously only opened the
       date picker via the small trailing icon. Extracted a shared `ReadOnlyDateField` composable

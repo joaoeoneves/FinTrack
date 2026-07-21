@@ -9,21 +9,9 @@ at the bottom — the tiers below are the actionable remainder, ordered highest-
 
 **Resume point:** P1 (correctness/silent-failure bugs) and the earlier data-loss/correctness pass are
 fully cleared as of 2026-07-20 — see the completed log. **P2 (security hardening) and P3
-(silent-failure hygiene) are fully cleared** as of 2026-07-20 — see the completed log. **Next up is
-P4 (UX polish)**.
-
-## P4 — UX polish
-
-- [ ] Date field in Add/Edit Expense/Income only opens the date picker via the small trailing icon, not
-      the whole field, despite looking fully tappable.
-- [ ] Import/export UI labels ("Import CSV"/"Export CSV" in Settings) don't disclose that only expenses
-      are covered today — a user could reasonably believe it's a full backup and lose income data on
-      reinstall with no warning. Fix the copy regardless of when income CSV (below) lands.
-- [ ] Income list has no search or sort, unlike the Expense list (`ExpenseListViewModel` has both
-      `query` and `sortOption`; `IncomeListViewModel` has neither) — a feature-parity gap from Income
-      being added later as a parallel feature.
-- [ ] Pie chart (`PieChart.kt`) has no accessibility semantics — canvas-drawn donut plus disconnected
-      legend rows give TalkBack users no usable representation of the breakdown.
+(silent-failure hygiene) are fully cleared** as of 2026-07-20 — see the completed log. **P4 (UX
+polish) is fully cleared** as of 2026-07-21 — see the completed log. **Next up is P5 (testing/CI
+gaps)**.
 
 ## P5 — Testing / CI gaps
 
@@ -77,6 +65,41 @@ more speculative lifts.
 ---
 
 ## Completed
+
+- [x] **[P4] Date field tap target.** Add/Edit Expense/Income date fields previously only opened the
+      date picker via the small trailing icon. Extracted a shared `ReadOnlyDateField` composable
+      (`ui/common/DateField.kt`) using a `MutableInteractionSource`/`PressInteraction.Release` listener so
+      tapping anywhere in the field opens the picker, while the icon still also works. Covered by a new
+      instrumented Compose test (`DateFieldTest.kt`) and a new Maestro flow (`.maestro/date-field.yaml`),
+      both run on a live emulator. Done 2026-07-21.
+- [x] **[P4] Import/export label scope disclosure.** Settings' "Import CSV"/"Export CSV" labels now read
+      "Import CSV (expenses)"/"Export CSV (expenses)" (and PT equivalents), disclosing that only expenses
+      are covered — pure string-resource change, `.maestro/settings.yaml` updated and re-verified on a live
+      emulator. Done 2026-07-21.
+- [x] **[P4] Income list search/sort parity.** `IncomeListViewModel`/`IncomeListScreen` gained `query`/
+      `sortOption` (new `IncomeSortOption` enum), mirroring `ExpenseListViewModel`'s existing
+      `SavedStateHandle`-backed pattern; filtering matches `source`, sorting by date/amount either
+      direction. **Also fixed a real, pre-existing bug found via E2E testing**: the search field's
+      displayed value was bound to `Content.query`, which only updates after a full round-trip through the
+      Firestore-backed repository on every keystroke — fast typing silently dropped/reordered characters.
+      Present on both `ExpenseListScreen.kt` and `IncomeListScreen.kt`; fixed by exposing each ViewModel's
+      instant `SavedStateHandle`-backed `query` StateFlow directly for the text field to bind to, leaving
+      the round-tripped value only for the "no match" message. A follow-up detekt pass (`LongParameterList`/
+      `LongMethod` on both `*ListContent` composables) led to extracting shared `SearchAndSortRow.kt` and
+      `SwipeToDeleteRow.kt` composables — a genuine de-duplication, not a baseline suppression. New unit
+      tests (`IncomeListViewModelTest`) and Maestro coverage (`income-tracking.yaml`, plus a coordinate/
+      timing fix in `swipe-delete-check.yaml` needed after the new UI pushed rows down) all pass on a live
+      emulator. Done 2026-07-21.
+- [x] **[P4] Pie chart TalkBack accessibility.** `PieChart.kt`'s canvas-drawn donut and legend rows had no
+      accessibility semantics and no percentage was shown anywhere (visual or spoken). Added a
+      non-composable, unit-tested `percentageOf()` helper and `Modifier.clearAndSetSemantics` on both the
+      chart ring (a summary description: total + each category's name/percentage/amount) and each legend
+      row (one merged node per category, e.g. "Shopping, 45 percent, $45.00"), reusing existing
+      `formatAmountCents`/`ExpenseCategory.displayName` so wording matches what's visually shown. New string
+      resources in both locales. Covered by a JVM unit test (`PieChartPercentageTest`, 12 cases) and an
+      instrumented Compose semantics test (`PieChartAccessibilityTest`, 4 cases) confirming the old
+      fragmented text nodes are genuinely subsumed, not just decorated — both run and passing on a live
+      emulator. Done 2026-07-21.
 
 - [x] Migrate deprecated icons (`Icons.Filled.TrendingUp`, `ArrowBack`) to
       `Icons.AutoMirrored.Filled.*` (`MoreVert` turned out to be unused, nothing to migrate there).
